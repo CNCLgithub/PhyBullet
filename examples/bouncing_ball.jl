@@ -38,14 +38,18 @@ function simple_scene()
 end
 
 @gen function observe(k::RigidBodyState)
-    pos = k.position
+    pos = k.position # XYZ position
+    # add noise to position
     obs = @trace(broadcasted_normal(pos, 0.1), :position)
     return obs
 end
 
 @gen function kernel(t::Int, prev_state::BulletState, sim::BulletSim)
     # use of PhySMC.step
-    next_state::BulletState = step(sim, prev_state)
+    next_state::BulletState = PhySMC.step(sim, prev_state)
+    # elem state could be a different type
+    # but here we only have one `RigidBody` element
+    # so  `next_state.kinematics = [RigidBodyState]`
     obs = @trace(Gen.Map(observe)(next_state.kinematics), :observe)
     return next_state
 end
