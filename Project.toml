@@ -1,0 +1,7 @@
+name = "PhyBullet"
+uuid = "63daae69-5b14-439d-ac6f-096429ca839b"
+authors = ["belledon <mbelledonne@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
