@@ -44,6 +44,7 @@ end
 end
 
 @gen function kernel(t::Int, prev_state::BulletState, sim::BulletSim)
+    # use of PhySMC.step
     next_state::BulletState = step(sim, prev_state)
     obs = @trace(Gen.Map(observe)(next_state.kinematics), :observe)
     return next_state
