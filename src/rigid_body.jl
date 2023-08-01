@@ -11,7 +11,7 @@ Consists of a single base collision object.
 
 ---
 
-$(TYPEFIELDS)
+$(TYPEDFIELDS)
 """
 struct RigidBody <: BulletElement
     "The `bodyUniqueId` of the base object"
@@ -25,7 +25,7 @@ $(TYPEDEF)
 
 ---
 
-$(TYPEFIELDS)
+$(TYPEDFIELDS)
 """
 struct RigidBodyState <: BulletElemState{RigidBody}
     "XYZ position"
@@ -43,31 +43,37 @@ function RigidBodyState(e::RigidBody, sim::BulletSim)
 end
 
 function get_state(e::RigidBody, sim::BulletSim)
-    @pycall pos, orn = pb.getBasePositionAndOrientation(
-        e.object_id,
-        physicsClientId = sim.client
-    )::Tuple{PyArray, PyArray}
-    @pycall lin_vel, ang_vel = pb.getBaseVelocity(
-        e.object_id,
-        physicsClientId = sim.client
-    )::Tuple{PyArray, PyArray}
-
+    (pos, orn) =
+        @pycall pb.getBasePositionAndOrientation(;
+                                                 # docstring is wrong
+                                                 # about keyword name
+                                                 bodyUniqueId =  e.object_id,
+                                                 physicsClientId = sim.client,
+                                                 )::Tuple{PyVector, PyVector}
+    (lin_vel, ang_vel) =
+        @pycall pb.getBaseVelocity(;
+                                   bodyUniqueId =  e.object_id,
+                                   physicsClientId = sim.client
+                                   )::Tuple{PyVector, PyVector}
     RigidBodyState(pos, orn, lin_vel, ang_vel)
 end
 
 function set_state!(e::RigidBody, sim::BulletSim, st::RigidBodyState)
-    @pycall pb.resetBasePositionAndOrientation(
-        e.object_id,
-        posObj =  st.position,
-        ornObj = st.orientation,
-        physicsClientId = sim.client
-    )::PyObject
-    @pycall pb.resetBaseVelocity(
-        e.object_id,
-        linearVelocity = st.linear_vel,
-        angularVelocity = st.ang_vel,
-        physicsClientId = sim.client
-    )::PyObject
+    @pycall pb.resetBasePositionAndOrientation(;
+                                               bodyUniqueId =  e.object_id,
+                                               # linkIndex = -1,
+                                               posObj =  st.position,
+                                               ornObj = st.orientation,
+                                               physicsClientId = sim.client
+                                               )::PyObject
+    @pycall pb.resetBaseVelocity(;
+                                 # the different name is annoying
+                                 objectUniqueId =  e.object_id,
+                                 # linkIndex = -1,
+                                 linearVelocity = st.linear_vel,
+                                 angularVelocity = st.angular_vel,
+                                 physicsClientId = sim.client
+                                 )::PyObject
 
     return nothing
 end
@@ -95,7 +101,7 @@ A non-exhaustive list of properties
 
 ---
 
-$(TYPEFIELDS)
+$(TYPEDFIELDS)
 """
 struct RigidBodyLatents <: BulletElemLatents{RigidBody}
     data::NamedTuple
@@ -103,13 +109,23 @@ end
 
 function get_latents(e::RigidBody, sim::BulletSim)
     # REVIEW: pybullet docs says `getDynamicsInfo` is incomplete / weird
-    ls = @pycall pb.getDynamicsInfo(;
-        bodyUniqueId = e.object_id,
-        linkIndex = -1, # base (assumption for `RigidBody`)
-        ls.data..., # REVIEW: is there a more direct way to passing in latents?
-        physicsClientId = sim.client
-    )::Dict
-    NamedTuple(ls)
+    ls =
+        @pycall pb.getDynamicsInfo(;
+                                   bodyUniqueId = e.object_id,
+                                   linkIndex = -1, # base (assumption for `RigidBody`)
+                                   physicsClientId = sim.client
+                                   )::PyObject
+    RigidBodyLatents((mass = ls[1],
+                      lateralFriction = ls[2],
+                      # localInertiaDiagonal = ls[3],
+                      # localInertialPos = ls[4],
+                      # localInertialOrn = ls[5],
+                      restitution = ls[6],
+                      rollingFriction = ls[7],
+                      spinningFriction = ls[8],
+                      contactDamping = ls[9],
+                      contactStiffness = ls[10],
+                      collisionMargin = ls[12]))
 end
 
 function set_latents!(e::RigidBody, sim::BulletSim, ls::RigidBodyLatents)

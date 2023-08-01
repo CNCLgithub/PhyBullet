@@ -5,17 +5,17 @@ using PhyBullet
 
 
 function simple_scene()
-    client = pb.connect(pb.DIRECT)
-    pb.setGravity(0,0,-10)
+    client = @pycall pb.connect(pb.DIRECT)::Int64
+    pb.setGravity(0,0,-10; physicsClientId = client)
 
     # add a table
     dims = [1.0, 1.0, 0.1] # in meters
     col_id = pb.createCollisionShape(pb.GEOM_BOX,
                                      halfExtents = dims,
                                      physicsClientId = client)
-    obj_id = self.createMultiBody(baseCollisionShapeIndex = col_id,
-                                  basePosition = [0., 0., -0.05],
-                                  physicsClientId = client)
+    obj_id = pb.createMultiBody(baseCollisionShapeIndex = col_id,
+                                basePosition = [0., 0., -0.1],
+                                physicsClientId = client)
     pb.changeDynamics(obj_id,
                       -1;
                       mass = 0., # 0 mass are stationary
@@ -24,11 +24,11 @@ function simple_scene()
 
     # add a ball
     bcol_id = pb.createCollisionShape(pb.GEOM_SPHERE,
-                                      radius = 0.1
+                                      radius = 0.1,
                                       physicsClientId = client)
-    bobj_id = self.createMultiBody(baseCollisionShapeIndex = bcol_id,
-                                   basePosition = [0., 0., 1.0],
-                                   physicsClientId = client)
+    bobj_id = pb.createMultiBody(baseCollisionShapeIndex = bcol_id,
+                                 basePosition = [0., 0., 1.0],
+                                 physicsClientId = client)
     pb.changeDynamics(bobj_id,
                       -1;
                       mass = 1.0,
@@ -40,7 +40,7 @@ end
 @gen function observe(k::RigidBodyState)
     pos = k.position # XYZ position
     # add noise to position
-    obs = @trace(broadcasted_normal(pos, 0.1), :position)
+    obs = @trace(broadcasted_normal(pos, 0.01), :position)
     return obs
 end
 
@@ -54,16 +54,25 @@ end
     return next_state
 end
 
+@gen function prior()
+    mass = @trace(uniform(0., 1.), :mass)
+    res = @trace(uniform(0.5, 0.9), :restitution)
+    ls = RigidBodyLatents((mass = mass, restitution = res))
+    return ls
+end
+
+@load_generated_functions
+
 function main()
 
     # start with a ball above a table
     client, ball_id = simple_scene()
 
-    sim = BulletSim(client)
+    sim = BulletSim(;client=client)
     ball = RigidBody(ball_id)
     init_state = BulletState(sim, [ball])
 
-    gargs = (10, # number of steps
+    gargs = (100, # number of steps
              init_state, # initial state
              sim)
     trace, _ = generate(Gen.Unfold(kernel), gargs)
