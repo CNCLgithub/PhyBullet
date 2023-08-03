@@ -49,8 +49,8 @@ source .venv/bin/activate
 
 Need some exports for Julia's `PyCall` to use the right python environment
 ``` sh
-export PYCALL_JL_RUNTIME_PYTHON="python"
 export PYCALL_JL_RUNTIME_PYTHON="${PWD}/.venv/bin/python3"
+export PYCALL_JL_RUNTIME_PYTHONHOME="${PWD}/.venv"
 ```
 
 ``` sh
