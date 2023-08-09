@@ -1,3 +1,8 @@
+using Gen
+using PyCall
+using PhySMC
+using PhyBullet
+using Accessors
 
 function simple_scene(mass::Float64=1.0,
                       restitution::Float64=0.9)

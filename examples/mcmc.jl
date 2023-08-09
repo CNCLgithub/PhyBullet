@@ -1,8 +1,4 @@
 using Gen
-using PyCall
-using PhySMC
-using PhyBullet
-using Accessors
 using UnicodePlots
 
 include("__@DIR__/helpers.jl")
