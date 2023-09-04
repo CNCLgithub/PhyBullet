@@ -19,15 +19,6 @@ function Gen.logpdf(::TruncNorm, x::Float64, mu::U, noise::T, low::T, high::T) w
     return Distributions.logpdf(d, x)
 end;
 
-# this function does not work because the max and min function do not offer an interface for the @trace macro, they would have to be implemented as probability distributions
-@gen function bounded_drift(start::Float64, sd::Float64,
-    lower::Float64=-Inf, upper::Float64=Inf)
-    val ~ normal(start, sd)
-    val_lower_bounded = @trace(max(val, lower), :vl)
-    val_bounded = @trace(min(val_lower_bounded, upper), :vb)
-    return val_bounded
-end
-
 # this proposal function implements a truncated random walk for mass and restitution
 @gen function proposal(tr::Gen.Trace)
     # HINT: https://www.gen.dev/tutorials/iterative-inference/tutorial#mcmc-2
@@ -60,8 +51,8 @@ Performs Metropolis-Hastings MCMC.
 """
 function inference_procedure(gm_args::Tuple,
                              obs::Gen.ChoiceMap, 
-                             update_vis,
-                             steps::Int = 20)
+                             update_vis::Function = (tr)=>(),
+                             steps::Int = 100)
 
     # start with an initial guess of physical latents
     # `ls` is the log score or how well this
@@ -74,32 +65,31 @@ function inference_procedure(gm_args::Tuple,
 
     # count the number of accepted moves and track accepted proposals
     acceptance_count = 0
-    mass_log = Vector{Float64}()
-    res_log = Vector{Float64}()
+    mass_log = Vector{Float64}(undef, steps) 
+    res_log = Vector{Float64}(undef, steps)
+    scores = Vector{Float64}(undef, steps)
 
-    for _ = 1:steps
+    for i = 1:steps
         # apply the proposal funciton to generate a
         # new guess over the ball's latents
         # that is related to the previous trace
         # see `?mh` in the REPL for more info
         tr, accepted = mh(tr, proposal, ())
-        push!(mass_log, tr[:prior => 1 => :mass])
-        push!(res_log, tr[:prior => 1 => :restitution])
+        mass_log[i] = tr[:prior => 1 => :mass]
+        res_log[i] = tr[:prior => 1 => :restitution]
+        scores[i] = get_score(tr)
         acceptance_count += Int(accepted)
         if accepted
             update_vis(tr)
         end
     end
-    plt = plot(1:steps, mass_log, title="Trace log of latent priors", label="mass", xlabel="step",  ylabel="value", ylim = (0, 2))
-    plot!(plt, 1:steps, res_log, label="res")
-    display(plt)
 
     acceptance_ratio = acceptance_count / steps
 
     println("Final logscore: $(get_score(tr))")
     println("Acceptance ratio: $(acceptance_ratio)")
 
-    return (tr, acceptance_ratio)
+    return (tr, acceptance_ratio, mass_log, res_log, scores)
 end
 
 """
@@ -137,26 +127,27 @@ function data_generating_procedure(t::Int64)
         _choices = Gen.get_submap(choices, addr)
         Gen.set_submap!(obs, addr, _choices)
     end
-
-    #=  plt = lineplot(1:t, get_zs(trace),
-                   title="Height of ball", name="observation with res $(trace[:prior => 1 => :restitution])",
-                   xlabel="t", ylabel="z", canvas=DotCanvas,
-                   border=:ascii) =#
-    plt = plot(1:t, get_zs(trace),title="Height of ball", xlabel="t", ylabel="z",label="Observation")
     
-    return (gargs, obs, plt)
+    return (gargs, obs)
 
 end
 
 function main()
 
     t = 60 # 1 second of observations
-    (gargs, obs, plt) = data_generating_procedure(t)
+    (gargs, obs) = data_generating_procedure(t)
+
+    zs = [get_submap(obs, :kernel => i => :observe => 1)[:position][3] for i in 1:t]
+    plt = plot(1:t, zs, title="Height of ball", xlabel="t", ylabel="z", label="Observation")
     display(plt)
     
-    update_vis(trace) = display(plot!(plt, 1:t, get_zs(trace), label="res $(trace[:prior => 1 => :restitution])"))
-    (tr, aratio) = inference_procedure(gargs, obs, update_vis)
-    print(tr[:prior => 1])
+    update_vis(trace) = display(plot!(plt, 1:t, get_zs(trace), label="res $(round(trace[:prior => 1 => :restitution]; digits=3))"))
+    (tr, aratio, mass_log, res_log, scores) = inference_procedure(gargs, obs, update_vis)
+
+    scores_plt = Plots.plot(1:length(scores), scores, title="Log of scores", xlabel="step", ylabel="log score")
+    mass_plt = Plots.histogram(1:length(mass_log), mass_log, title="Histogram of mass", legend=false)
+    res_plt = Plots.histogram(1:length(res_log), res_log, title="Histogram of res", legend=false)
+    display(Plots.plot(scores_plt, mass_plt, res_plt))
 
     println("press enter to exit the program")
     readline()
