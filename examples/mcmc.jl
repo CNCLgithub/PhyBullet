@@ -38,50 +38,37 @@ end;
     return (mass, restitution)
 end
 
-function get_zs(tr::Gen.Trace)
-    # get the z positions
-    states = get_retval(tr)
-    map(st -> st.kinematics[1].position[3], states)
-end
-
 """
     inference_procedure
 
 Performs Metropolis-Hastings MCMC.
 """
 function inference_procedure(gm_args::Tuple,
-                             obs::Gen.ChoiceMap, 
-                             update_vis::Function = (tr)=>(),
+                             obs::Gen.ChoiceMap,
                              steps::Int = 100)
 
     # start with an initial guess of physical latents
     # `ls` is the log score or how well this
     # initial guess explains the observations
     tr, ls = Gen.generate(model, gm_args, obs)
-    # visualize predictions of initial trace
-    update_vis(tr)
 
     println("Initial logscore: $(ls)")
 
     # count the number of accepted moves and track accepted proposals
     acceptance_count = 0
-    mass_log = Vector{Float64}(undef, steps) 
-    res_log = Vector{Float64}(undef, steps)
-    scores = Vector{Float64}(undef, steps)
+    traces = Vector{Gen.DynamicDSLTrace}(undef, steps) 
 
     for i = 1:steps
+        if i % 10 == 0
+            println("$(i) steps completed")
+        end
         # apply the proposal funciton to generate a
         # new guess over the ball's latents
         # that is related to the previous trace
         # see `?mh` in the REPL for more info
         tr, accepted = mh(tr, proposal, ())
-        mass_log[i] = tr[:prior => 1 => :mass]
-        res_log[i] = tr[:prior => 1 => :restitution]
-        scores[i] = get_score(tr)
+        traces[i] = tr
         acceptance_count += Int(accepted)
-        if accepted
-            update_vis(tr)
-        end
     end
 
     acceptance_ratio = acceptance_count / steps
@@ -89,7 +76,7 @@ function inference_procedure(gm_args::Tuple,
     println("Final logscore: $(get_score(tr))")
     println("Acceptance ratio: $(acceptance_ratio)")
 
-    return (tr, acceptance_ratio, mass_log, res_log, scores)
+    return (traces, acceptance_ratio)
 end
 
 """
@@ -128,26 +115,41 @@ function data_generating_procedure(t::Int64)
         Gen.set_submap!(obs, addr, _choices)
     end
     
-    return (gargs, obs)
+    return (gargs, obs, trace)
 
+end
+
+"""
+plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
+
+Display the observed and final simulated trajectory as well as distributions for latents and the score
+"""
+function plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
+    t = length(truth[:kernel])
+    get_zs(trace) = [trace[:kernel => i => :observe => 1][3] for i in 1:t]
+    trajectory_plt = plot(1:t, get_zs(truth), title="Height of ball", xlabel="t", ylabel="z", label="Observation")
+    plot!(trajectory_plt, 1:t, get_zs(last(traces)), label="Last trace")
+
+    steps = length(traces)
+    mass_log = [t[:prior => 1 => :mass] for t in traces]
+    res_log = [t[:prior => 1 => :restitution] for t in traces]
+    scores = [get_score(t) for t in traces]
+
+    scores_plt = Plots.plot(1:steps, scores, title="Log of scores", xlabel="step", ylabel="log score")
+    mass_plt = Plots.histogram(1:steps, mass_log, title="Histogram of mass", legend=false)
+    res_plt = Plots.histogram(1:steps, res_log, title="Histogram of restitution", legend=false)
+
+    Plots.plot(trajectory_plt, scores_plt, mass_plt, res_plt)
 end
 
 function main()
 
     t = 60 # 1 second of observations
-    (gargs, obs) = data_generating_procedure(t)
+    (gargs, obs, truth) = data_generating_procedure(t)
 
-    zs = [get_submap(obs, :kernel => i => :observe => 1)[:position][3] for i in 1:t]
-    plt = plot(1:t, zs, title="Height of ball", xlabel="t", ylabel="z", label="Observation")
-    display(plt)
-    
-    update_vis(trace) = display(plot!(plt, 1:t, get_zs(trace), label="res $(round(trace[:prior => 1 => :restitution]; digits=3))"))
-    (tr, aratio, mass_log, res_log, scores) = inference_procedure(gargs, obs, update_vis)
+    (traces, aratio) = inference_procedure(gargs, obs, 50)    
 
-    scores_plt = Plots.plot(1:length(scores), scores, title="Log of scores", xlabel="step", ylabel="log score")
-    mass_plt = Plots.histogram(1:length(mass_log), mass_log, title="Histogram of mass", legend=false)
-    res_plt = Plots.histogram(1:length(res_log), res_log, title="Histogram of res", legend=false)
-    display(Plots.plot(scores_plt, mass_plt, res_plt))
+    display(plot_traces(truth, traces))
 
     println("press enter to exit the program")
     readline()
