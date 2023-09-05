@@ -5,7 +5,7 @@ using PhyBullet
 using Accessors
 using UnicodePlots
 
-include("../helpers.jl")
+include(joinpath(@__DIR__, "helpers.jl"))
 
 function draw_trace(tr::Gen.Trace)
     (t, _, _) = get_args(tr)
