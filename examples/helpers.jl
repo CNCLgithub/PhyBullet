@@ -4,6 +4,10 @@ using PhySMC
 using PhyBullet
 using Accessors
 
+################################################################################
+# Scene
+################################################################################
+
 function simple_scene(mass::Float64=1.0,
                       restitution::Float64=0.9)
     client = @pycall pb.connect(pb.DIRECT)::Int64
@@ -39,6 +43,27 @@ function simple_scene(mass::Float64=1.0,
 
     (client, bobj_id)
 end
+
+################################################################################
+# Distributions
+################################################################################
+
+struct TruncNorm <: Gen.Distribution{Float64} end
+const trunc_norm = TruncNorm()
+function Gen.random(::TruncNorm, mu::U, noise::T, low::T, high::T) where {U<:Real,T<:Real}
+    d = Distributions.Truncated(Distributions.Normal(mu, noise),
+                                low, high)
+    return Distributions.rand(d)
+end;
+function Gen.logpdf(::TruncNorm, x::Float64, mu::U, noise::T, low::T, high::T) where {U<:Real,T<:Real}
+    d = Distributions.Truncated(Distributions.Normal(mu, noise),
+                                low, high)
+    return Distributions.logpdf(d, x)
+end;
+
+################################################################################
+# Generative Model
+################################################################################
 
 @gen function prior(ls::RigidBodyLatents)
     mass = @trace(uniform(0., 1.), :mass)
@@ -77,3 +102,30 @@ end
 end
 
 @load_generated_functions
+
+################################################################################
+# Visuals
+################################################################################
+
+"""
+plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
+
+Display the observed and final simulated trajectory as well as distributions for latents and the score
+"""
+function plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
+    t = length(truth[:kernel])
+    get_zs(trace) = [trace[:kernel => i => :observe => 1][3] for i in 1:t]
+    trajectory_plt = plot(1:t, get_zs(truth), title="Height of ball", xlabel="t", ylabel="z", label="Observation")
+    plot!(trajectory_plt, 1:t, get_zs(last(traces)), label="Last trace")
+
+    steps = length(traces)
+    mass_log = [t[:prior => 1 => :mass] for t in traces]
+    res_log = [t[:prior => 1 => :restitution] for t in traces]
+    scores = [get_score(t) for t in traces]
+
+    scores_plt = Plots.plot(1:steps, scores, title="Log of scores", xlabel="step", ylabel="log score")
+    mass_plt = Plots.histogram(1:steps, mass_log, title="Histogram of mass", legend=false)
+    res_plt = Plots.histogram(1:steps, res_log, title="Histogram of restitution", legend=false)
+
+    Plots.plot(trajectory_plt, scores_plt, mass_plt, res_plt)
+end
