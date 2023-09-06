@@ -107,6 +107,14 @@ end
 # Visuals
 ################################################################################
 
+get_zs(trace, t) = [trace[:kernel => i => :observe => 1][3] for i in 1:t]
+
+function plot_zs(trace::Gen.DynamicDSLTrace)
+    t = length(trace[:kernel])
+    
+    return plot(1:t, get_zs(trace, t), title="Height of ball", xlabel="t", ylabel="z", label="Observation")
+end
+
 """
 plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
 
@@ -114,9 +122,8 @@ Display the observed and final simulated trajectory as well as distributions for
 """
 function plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
     t = length(truth[:kernel])
-    get_zs(trace) = [trace[:kernel => i => :observe => 1][3] for i in 1:t]
-    trajectory_plt = plot(1:t, get_zs(truth), title="Height of ball", xlabel="t", ylabel="z", label="Observation")
-    plot!(trajectory_plt, 1:t, get_zs(last(traces)), label="Last trace")
+    trajectory_plt = plot_zs(truth)
+    plot!(trajectory_plt, 1:t, get_zs(last(traces), t), label="Last trace")
 
     steps = length(traces)
     mass_log = [t[:prior => 1 => :mass] for t in traces]

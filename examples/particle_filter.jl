@@ -32,14 +32,19 @@ Performs Metropolis-Hastings MCMC.
 function inference_procedure(gm_args::Tuple,
                              obs::Vector{Gen.ChoiceMap},
                              particles::Int = 100)
-    # TODO: initialize particle filter
+    get_args(t) = (t, gm_args[2:3]...)
+
+    # initialize particle filter
+    state = Gen.initialize_particle_filter(model, get_args(0), obs[1], particles)
 
     # Then increment through each observation step
-    for (t, o) = enumerate(obs)
-        # TODO
+    for (t, o) = enumerate(obs[2:end])
+        Gen.maybe_resample!(state, ess_threshold=particles/2) 
+        Gen.particle_filter_step!(state, get_args(t), (UnknownChange(),), o, proposal, ())
     end
 
-    # TODO: return the "unweighted" set of traces after t steps
+    # return the "unweighted" set of traces after t steps
+    return Gen.sample_unweighted_traces(state, particles)
 end
 
 """
@@ -86,6 +91,8 @@ function main()
 
     t = 60 # 1 second of observations
     (gargs, obs, truth) = data_generating_procedure(t)
+
+    # display(plot_zs(truth))
 
     (traces, aratio) = inference_procedure(gargs, obs, 20)
 
