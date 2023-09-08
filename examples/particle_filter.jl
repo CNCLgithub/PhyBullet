@@ -39,14 +39,13 @@ function inference_procedure(gm_args::Tuple,
 
     # Then increment through each observation step
     for (t, o) = enumerate(obs)
-        # apply a rejuvenation move to each particle
+        # # apply a rejuvenation move to each particle
         # for i=1:particles
-        #     initial_choices = select(:mass, :restitution)
-        #     state.traces[i], _  = mh(state.traces[i], initial_choices)
+        #     state.traces[i], _  = mh(state.traces[i], proposal, ())
         # end
 
         Gen.maybe_resample!(state, ess_threshold=particles/2) 
-        Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o, proposal, ())
+        Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o)
     end
 
     # return the "unweighted" set of traces after t steps
