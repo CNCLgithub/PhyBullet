@@ -27,7 +27,7 @@ end
 """
     inference_procedure
 
-Performs Metropolis-Hastings MCMC.
+Performs particle filter inference with rejuvenation.
 """
 function inference_procedure(gm_args::Tuple,
                              obs::Vector{Gen.ChoiceMap},
@@ -39,13 +39,17 @@ function inference_procedure(gm_args::Tuple,
 
     # Then increment through each observation step
     for (t, o) = enumerate(obs)
-        # # apply a rejuvenation move to each particle
-        # for i=1:particles
-        #     state.traces[i], _  = mh(state.traces[i], proposal, ())
-        # end
+        # apply a rejuvenation move to each particle
+        for i=1:particles
+            state.traces[i], _  = mh(state.traces[i], proposal, ())
+        end
 
         Gen.maybe_resample!(state, ess_threshold=particles/2) 
         Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o)
+
+        if t % 1 == 0
+            println("$(t) time steps completed")
+        end
     end
 
     # return the "unweighted" set of traces after t steps
@@ -83,8 +87,10 @@ function data_generating_procedure(t::Int64)
     # extract noisy positions
     obs = Vector{Gen.ChoiceMap}(undef, t)
     for i = 1:t
-        addr = :kernel => i => :observe
-        obs[i] = Gen.get_submap(choices, addr)
+        prefix = :kernel => i => :observe
+        cm = choicemap()
+        set_submap!(cm, prefix, get_submap(choices, prefix))
+        obs[i] = cm
     end
     
     return (gargs, obs, trace)
@@ -102,7 +108,12 @@ function main()
     (traces, aratio) = inference_procedure(gargs, obs, 20)
 
     display(plot_traces(truth, traces))
-
+    ## │       ├── :restitution : 0.2506794788848446
+│   ##    │
+│   ##    └── :mass : 0.33564200078415324
+│   #    ├── :restitution : 0.24794082353094155
+│   #    │
+│   #    └── :mass : 0.5443356232078294
     println("press enter to exit the program")
     readline()
     return nothing
