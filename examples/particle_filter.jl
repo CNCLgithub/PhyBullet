@@ -40,12 +40,14 @@ function inference_procedure(gm_args::Tuple,
     # Then increment through each observation step
     for (t, o) = enumerate(obs)
         # apply a rejuvenation move to each particle
-        for i=1:particles
-            state.traces[i], _  = mh(state.traces[i], proposal, ())
+        @time begin
+            for i=1:particles
+                state.traces[i], _  = mh(state.traces[i], proposal, ())
+            end
+        
+            Gen.maybe_resample!(state, ess_threshold=particles/2) 
+            Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o)
         end
-
-        Gen.maybe_resample!(state, ess_threshold=particles/2) 
-        Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o)
 
         if t % 1 == 0
             println("$(t) time steps completed")
@@ -103,17 +105,12 @@ function main()
     t = 60 # 1 second of observations
     (gargs, obs, truth) = data_generating_procedure(t)
 
-    # display(plot_zs(truth))
+    display(plot_zs(truth))
 
-    (traces, aratio) = inference_procedure(gargs, obs, 20)
+    traces = inference_procedure(gargs, obs)
 
     display(plot_traces(truth, traces))
-    ## │       ├── :restitution : 0.2506794788848446
-│   ##    │
-│   ##    └── :mass : 0.33564200078415324
-│   #    ├── :restitution : 0.24794082353094155
-│   #    │
-│   #    └── :mass : 0.5443356232078294
+    
     println("press enter to exit the program")
     readline()
     return nothing
