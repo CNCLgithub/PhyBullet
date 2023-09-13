@@ -66,8 +66,8 @@ end;
 ################################################################################
 
 @gen function prior(ls::RigidBodyLatents)
-    mass = @trace(uniform(0., 1.), :mass)
-    res = @trace(uniform(0.2, 0.90), :restitution)
+    mass = @trace(gamma(1.2, 10.), :mass)
+    res = @trace(uniform(0, 1), :restitution)
     new_ls = setproperties(ls.data;
                            mass = mass,
                            restitution = res)
