@@ -2,6 +2,7 @@ using Gen
 using UnicodePlots
 using Distributions
 using Plots
+using Printf
 
 include(joinpath(@__DIR__, "helpers.jl"))
 
@@ -40,7 +41,7 @@ function inference_procedure(gm_args::Tuple,
     # Then increment through each observation step
     for (t, o) = enumerate(obs)
         # apply a rejuvenation move to each particle
-        @time begin
+        step_time = @elapsed begin
             for i=1:particles
                 state.traces[i], _  = mh(state.traces[i], proposal, ())
             end
@@ -49,8 +50,8 @@ function inference_procedure(gm_args::Tuple,
             Gen.particle_filter_step!(state, get_args(t), (UnknownChange(), NoChange(), NoChange()), o)
         end
 
-        if t % 1 == 0
-            println("$(t) time steps completed")
+        if t % 10 == 0
+            @printf "%s time steps completed (last step was %0.2f seconds)\n" t step_time
         end
     end
 
