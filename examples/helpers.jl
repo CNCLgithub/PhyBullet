@@ -101,7 +101,6 @@ function ramp(slope::Float64=2/3)
 
 
     #  add walls
-
     wall_dims = [[0.1, 8.0, 5.0], [0.1, 8.0, 5.0], [8.0, 0.1, 5.0]] # Width, length, height
     wall_positions = [
         [4.0, 0.0, 1.0],  # Right Wall
@@ -112,21 +111,23 @@ function ramp(slope::Float64=2/3)
         wall_col_id = pb.createCollisionShape(pb.GEOM_BOX, halfExtents=dims./2, physicsClientId=client)
         wall_obj_id = pb.createMultiBody(baseCollisionShapeIndex=wall_col_id, basePosition=pos, physicsClientId=client)
         pb.changeDynamics(wall_obj_id, -1; mass=0.0, restitution=0.9, physicsClientId=client)
-        pb.changeVisualShape(wall_obj_id, -1, rgbaColor=grey./2, physicsClientId=client)
+        pb.changeVisualShape(wall_obj_id, -1, rgbaColor=grey+[0.2, 0.2, 0.2, 0], physicsClientId=client)
     end
 
     # add an object on the ramp
-    obj_ramp_dims = [0.5, 0.5, 0.5]
+    obj_ramp_dims = [0.15, 0.3, 0.075]
     theta_radians = -atan(slope)
     orientation = [cos(theta_radians / 2), 0, sin(theta_radians / 2), 0]
 
     obj_on_ramp_col_id = pb.createCollisionShape(pb.GEOM_BOX, halfExtents=obj_ramp_dims/2, physicsClientId=client)
-    obj_on_ramp_obj_id = pb.createMultiBody(baseCollisionShapeIndex=obj_on_ramp_col_id, basePosition=[-1, 0, slope+obj_ramp_dims[3]], baseOrientation=orientation, physicsClientId=client)
+    lift = obj_ramp_dims[3]/2
+    obj_on_ramp_obj_id = pb.createMultiBody(baseCollisionShapeIndex=obj_on_ramp_col_id, basePosition=[-1+lift*cos(theta_radians), 0, 1*slope-lift*sin(theta_radians)], baseOrientation=orientation, physicsClientId=client)
     
     # add an object on the table that will collide with the object on the ramp as that one slides down
-    obj_on_table_col_id = pb.createCollisionShape(pb.GEOM_BOX, halfExtents=[0.1, 0.1, 0.1], physicsClientId=client)
-    obj_on_table_obj_id = pb.createMultiBody(baseCollisionShapeIndex=obj_on_table_col_id, basePosition=[1, 0.5, 0.1], physicsClientId=client)
-    
+    obj_on_table_dims = [0.2, 0.2, 0.1]
+    obj_on_table_col_id = pb.createCollisionShape(pb.GEOM_BOX, halfExtents=obj_on_table_dims/2, physicsClientId=client)
+    obj_on_table_obj_id = pb.createMultiBody(baseCollisionShapeIndex=obj_on_table_col_id, basePosition=[1, 0, obj_on_table_dims[3]/2], physicsClientId=client)
+
     (client)
 end
 
