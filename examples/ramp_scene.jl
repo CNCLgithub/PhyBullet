@@ -34,18 +34,18 @@ end
 function main()
 
     # start with a ball above a table
-    client, ball_id = simple_scene()
+    client, obj_ramp_id, obj_table_id = ramp()
 
     # configure simulator with the provided
     # client id
     sim = BulletSim(;client=client)
     # This is the object of interest in the scene
     # (the table is static)
-    ball = RigidBody(ball_id)
+    obj_ramp = RigidBody(obj_ramp_id)
     # Retrieve the default latents for the ball
     # as well as its initial positions
     # Note: alternative latents will be suggested by the `prior`
-    init_state = BulletState(sim, [ball])
+    init_state = BulletState(sim, [obj_ramp])
     # arguments for `model`
     gargs = (60, # number of steps (1s)
              sim,

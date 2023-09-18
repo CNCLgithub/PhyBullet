@@ -137,9 +137,9 @@ function ramp(
     obj_on_table_dims = [0.2, 0.2, 0.1]
     obj_on_table_col_id = pb.createCollisionShape(pb.GEOM_BOX, halfExtents=obj_on_table_dims/2, physicsClientId=client)
     obj_on_table_obj_id = pb.createMultiBody(baseCollisionShapeIndex=obj_on_table_col_id, basePosition=[1, 0, obj_on_table_dims[3]/2], physicsClientId=client)
-    pb.changeDynamics(obj_on_ramp_obj_id, -1; mass=1.0, restitution=0.9, physicsClientId=client)
+    pb.changeDynamics(obj_on_table_obj_id, -1; mass=1.0, restitution=0.9, physicsClientId=client)
 
-    (client)
+    (client, obj_on_ramp_obj_id, obj_on_table_obj_id)
 end
 
 ################################################################################
