@@ -8,49 +8,16 @@ using Accessors
 # Scene
 ################################################################################
 
-function simple_scene(mass::Float64=1.0,
-                      restitution::Float64=0.9)
-    client = @pycall pb.connect(pb.DIRECT)::Int64
-    pb.setGravity(0,0,-10; physicsClientId = client)
-
-    # add a table
-    dims = [1.0, 1.0, 0.1] # in meters
-    col_id = pb.createCollisionShape(pb.GEOM_BOX,
-                                     halfExtents = dims,
-                                     physicsClientId = client)
-    obj_id = pb.createMultiBody(baseCollisionShapeIndex = col_id,
-                                basePosition = [0., 0., -0.1],
-                                physicsClientId = client)
-    pb.changeDynamics(obj_id,
-                      -1;
-                      mass = 0., # 0 mass are stationary
-                      restitution = 0.9, # some is necessary
-                      physicsClientId=client)
-
-
-    # add a ball
-    bcol_id = pb.createCollisionShape(pb.GEOM_SPHERE,
-                                      radius = 0.1,
-                                      physicsClientId = client)
-    bobj_id = pb.createMultiBody(baseCollisionShapeIndex = bcol_id,
-                                 basePosition = [0., 0., 1.0],
-                                 physicsClientId = client)
-    pb.changeDynamics(bobj_id,
-                      -1;
-                      mass = mass,
-                      restitution = restitution,
-                      physicsClientId=client)
-
-    (client, bobj_id)
-end
-
 function ramp(
     slope::Float64=2/3,
     tableRampIntersection::Float64=0.,
     )
-    client = @pycall pb.connect(pb.GUI)::Int64
+    # for debugging
+    #client = @pycall pb.connect(pb.GUI)::Int64
+    #pb.resetDebugVisualizerCamera(4.5, 0, -40, [0.0, 0.0, 0.0]; physicsClientId=client)
+    client = @pycall pb.connect(pb.DIRECT)::Int64
     pb.setGravity(0,0,-10; physicsClientId = client)
-    pb.resetDebugVisualizerCamera(4.5, 0, -40, [0.0, 0.0, 0.0]; physicsClientId=client)
+    
 
     # add a table base
     grey = [0.5, 0.5, 0.5, 1]
@@ -92,7 +59,7 @@ function ramp(
     end
 
     # add a ramp
-    ramp_col_id = pb.createCollisionShape(pb.GEOM_MESH, fileName="examples/ramp.obj", physicsClientId=client, meshScale=[2, base_dims[2], slope*2])
+    ramp_col_id = pb.createCollisionShape(pb.GEOM_MESH, fileName="examples/ramp/ramp.obj", physicsClientId=client, meshScale=[2, base_dims[2], slope*2])
     ramp_position = [-2+tableRampIntersection, -base_dims[2]/2, 0]
     ramp_obj_id = pb.createMultiBody(baseCollisionShapeIndex=ramp_col_id, basePosition=ramp_position, physicsClientId=client)
     pb.changeDynamics(ramp_obj_id, -1; mass=0.0, restitution=0.9, physicsClientId=client)
@@ -142,6 +109,47 @@ function ramp(
     (client, obj_on_ramp_obj_id, obj_on_table_obj_id)
 end
 
+
+"""
+    data_generating_procedure(t::Int64)
+
+Create a trial (ground truth and observations) with `t` timepoints
+"""
+function data_generating_procedure(t::Int64)
+
+    client, obj_ramp_id, obj_table_id = ramp()
+
+    # configure simulator with the provided
+    # client id
+    sim = BulletSim(;client=client)
+    # These are the objects of interest in the scene
+    # (the rest is static)
+    obj_ramp = RigidBody(obj_ramp_id)
+    obj_table = RigidBody(obj_table_id)
+    # Retrieve the default latents for the objects
+    # as well as their initial positions
+    # Note: alternative latents will be suggested by the `prior`
+    init_state = BulletState(sim, [obj_ramp, obj_table])
+    # arguments for `model`
+    gargs = (t, # number of steps
+             sim,
+             init_state)
+
+    # execute `model`
+    trace, _ = Gen.generate(model, gargs)
+    choices = get_choices(trace)
+    # extract noisy positions
+    obs = Gen.choicemap()
+    for i = 1:t
+        addr = :kernel => i => :observe
+        _choices = Gen.get_submap(choices, addr)
+        Gen.set_submap!(obs, addr, _choices)
+    end
+    
+    return (gargs, obs, trace)
+
+end
+
 ################################################################################
 # Distributions
 ################################################################################
@@ -164,11 +172,10 @@ end;
 ################################################################################
 
 @gen function prior(ls::RigidBodyLatents)
-    mass = @trace(gamma(1.2, 10.), :mass)
-    res = @trace(uniform(0, 1), :restitution)
+    mass= @trace(gamma(1.2, 10.), :mass)
+
     new_ls = setproperties(ls.data;
-                           mass = mass,
-                           restitution = res)
+                           mass = mass)
     new_latents = RigidBodyLatents(new_ls)
     return new_latents
 end
@@ -184,8 +191,8 @@ end
     # use of PhySMC.step
     next_state::BulletState = PhySMC.step(sim, prev_state)
     # elem state could be a different type
-    # but here we only have one `RigidBody` element
-    # so  `next_state.kinematics = [RigidBodyState]`
+    # here we have two `RigidBody` elements
+    # so  `next_state.kinematics = [RigidBodyState, RigidBodyState]`
     obs = @trace(Gen.Map(observe)(next_state.kinematics), :observe)
     return next_state
 end
@@ -202,15 +209,42 @@ end
 @load_generated_functions
 
 ################################################################################
+# Inference
+################################################################################
+
+# this proposal function implements a truncated random walk for the both mass priors
+@gen function proposal(tr::Gen.Trace)
+    # get previous values from `tr`
+    choices = get_choices(tr)
+    prev_mass_1 = choices[:prior => 1 => :mass]
+    prev_mass_2 = choices[:prior => 2 => :mass]
+    
+    # sample new values conditioned on the old ones
+    mass_1 = {:prior => 1 => :mass} ~ trunc_norm(prev_mass_1, .25, 0., Inf)
+    mass_2 = {:prior => 2 => :mass} ~ trunc_norm(prev_mass_2, .25, 0., Inf)
+    
+    # the return of this function is not
+    # neccessary but could be useful
+    # for debugging.
+    return (mass_1, mass_2)
+end
+
+################################################################################
 # Visuals
 ################################################################################
 
-get_zs(trace, t) = [trace[:kernel => i => :observe => 1][3] for i in 1:t]
+function plot_trace(tr::Gen.Trace)
+    (t, _, _) = get_args(tr)
+    # get the prior choice for the two masses
+    choices = get_choices(tr)
+    masses = [round(choices[:prior => i => :mass], digits=2) for i in 1:2]
 
-function plot_zs(trace::Gen.DynamicDSLTrace)
-    t = length(trace[:kernel])
-    
-    return plot(1:t, get_zs(trace, t), title="Height of ball", xlabel="t", ylabel="z", label="Observation")
+    # get the x positions
+    states = get_retval(tr)
+    xs = [map(st -> st.kinematics[i].position[1], states) for i = 1:2]
+
+    # return plot
+    plot(1:t, xs, title="($(masses[1]), $(masses[2]))", labels=["x1" "x2"], xlabel="t", ylabel="x", titlefontsize=8)
 end
 
 """
@@ -220,17 +254,16 @@ Display the observed and final simulated trajectory as well as distributions for
 """
 function plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
     t = length(truth[:kernel])
-    trajectory_plt = plot_zs(truth)
-    plot!(trajectory_plt, 1:t, get_zs(last(traces), t), label="Last trace")
+    
+    observed_plt = plot_trace(truth)
+    simulated_plt = plot_trace(last(traces))
 
     steps = length(traces)
-    mass_log = [t[:prior => 1 => :mass] for t in traces]
-    res_log = [t[:prior => 1 => :restitution] for t in traces]
+    mass_logs = [[t[:prior => i => :mass] for t in traces] for i in 1:2]
     scores = [get_score(t) for t in traces]
 
-    scores_plt = Plots.plot(1:steps, scores, title="Log of scores", xlabel="step", ylabel="log score")
-    mass_plt = Plots.histogram(1:steps, mass_log, title="Histogram of mass", legend=false)
-    res_plt = Plots.histogram(1:steps, res_log, title="Histogram of restitution", legend=false)
+    scores_plt = plot(1:steps, scores, title="Log of scores", xlabel="step", ylabel="log score")
+    mass_plts = [Plots.histogram(1:steps, mass_logs[i], title="Histogram of mass $(i)", legend=false) for i in 1:2]
 
-    Plots.plot(trajectory_plt, scores_plt, mass_plt, res_plt)
+    plot(observed_plt, simulated_plt, mass_plts..., scores_plt)
 end
