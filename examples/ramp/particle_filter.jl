@@ -54,7 +54,7 @@ function main()
         obs[i] = cm
     end
 
-    traces = inference_procedure(gargs, obs)
+    traces = inference_procedure(gargs, obs, 60)
 
     display(plot_traces(truth, traces))
     

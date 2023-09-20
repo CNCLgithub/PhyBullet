@@ -233,7 +233,7 @@ end
 # Visuals
 ################################################################################
 
-function plot_trace(tr::Gen.Trace)
+function plot_trace(tr::Gen.Trace, title="Trajectory")
     (t, _, _) = get_args(tr)
     # get the prior choice for the two masses
     choices = get_choices(tr)
@@ -244,7 +244,7 @@ function plot_trace(tr::Gen.Trace)
     xs = [map(st -> st.kinematics[i].position[1], states) for i = 1:2]
 
     # return plot
-    plot(1:t, xs, title="($(masses[1]), $(masses[2]))", labels=["x1" "x2"], xlabel="t", ylabel="x", titlefontsize=8)
+    plot(1:t, xs, title=title, labels=["ramp: $(masses[1])" "table: $(masses[2])"], xlabel="t", ylabel="x")
 end
 
 """
@@ -255,15 +255,15 @@ Display the observed and final simulated trajectory as well as distributions for
 function plot_traces(truth::Gen.DynamicDSLTrace, traces::Vector{Gen.DynamicDSLTrace})
     t = length(truth[:kernel])
     
-    observed_plt = plot_trace(truth)
-    simulated_plt = plot_trace(last(traces))
+    observed_plt = plot_trace(truth, "True trajectory")
+    simulated_plt = plot_trace(last(traces), "Last trace")
 
-    steps = length(traces)
+    num_traces = length(traces)
     mass_logs = [[t[:prior => i => :mass] for t in traces] for i in 1:2]
     scores = [get_score(t) for t in traces]
 
-    scores_plt = plot(1:steps, scores, title="Log of scores", xlabel="step", ylabel="log score")
-    mass_plts = [Plots.histogram(1:steps, mass_logs[i], title="Histogram of mass $(i)", legend=false) for i in 1:2]
-
-    plot(observed_plt, simulated_plt, mass_plts..., scores_plt)
+    scores_plt = plot(1:num_traces, scores, title="Scores", xlabel="trace number", ylabel="log score")
+    mass_plts = [Plots.histogram(1:num_traces, mass_logs[i], title="Mass $(i == 1 ? "Ramp object" : "Table object")", legend=false) for i in 1:2]
+    ratio_plt = Plots.histogram(1:num_traces, mass_logs[1]./mass_logs[2], title="mass ramp object / mass table object", legend=false)
+    plot(observed_plt, simulated_plt, mass_plts..., scores_plt, ratio_plt,  size=(1200, 800))
 end
