@@ -56,3 +56,7 @@ export PYCALL_JL_RUNTIME_PYTHONHOME="${PWD}/.venv"
 ``` sh
 julia --project=.
 ```
+
+## Example usage
+
+Examples of how to use this Julia package can be found in the repository [PhyBullet-examples](https://github.com/CNCLgithub/PhyBullet-examples).
