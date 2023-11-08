@@ -53,6 +53,8 @@ function get_latents end
 
 function set_latents! end
 
+function get_aabb end
+
 """
 State for `BulletSim`
 
