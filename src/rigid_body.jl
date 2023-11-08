@@ -36,6 +36,8 @@ struct RigidBodyState <: BulletElemState{RigidBody}
     linear_vel::SVector{3, Float64}
     "Angular velocity wX wY wZ"
     angular_vel::SVector{3, Float64}
+    "Axis-aligned Bounding box"
+    aabb::SVector{2, SVector{3, Float64}}
 end
 
 function RigidBodyState(e::RigidBody, sim::BulletSim)
@@ -55,7 +57,13 @@ function get_state(e::RigidBody, sim::BulletSim)
                                    bodyUniqueId =  e.object_id,
                                    physicsClientId = sim.client
                                    )::Tuple{PyVector, PyVector}
-    RigidBodyState(pos, orn, lin_vel, ang_vel)
+    aabb =
+        @pycall pb.getAABB(;
+            bodyUniqueId = e.object_id,
+            linkIndex = -1, # base (assumption for `RigidBody`)
+            physicsClientId = sim.client
+        )::PyObject
+    RigidBodyState(pos, orn, lin_vel, ang_vel, [collect(aabb[i]) for i in 1:2])
 end
 
 function set_state!(e::RigidBody, sim::BulletSim, st::RigidBodyState)
@@ -129,7 +137,7 @@ function get_latents(e::RigidBody, sim::BulletSim)
 end
 
 function set_latents!(e::RigidBody, sim::BulletSim, ls::RigidBodyLatents)
-
+    
     @pycall pb.changeDynamics(;
         bodyUniqueId = e.object_id,
         linkIndex = -1, # base (assumption for `RigidBody`)
