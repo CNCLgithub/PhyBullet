@@ -137,6 +137,7 @@ function get_latents(e::RigidBody, sim::BulletSim)
 end
 
 function set_latents!(e::RigidBody, sim::BulletSim, ls::RigidBodyLatents)
+    
     @pycall pb.changeDynamics(;
         bodyUniqueId = e.object_id,
         linkIndex = -1, # base (assumption for `RigidBody`)
